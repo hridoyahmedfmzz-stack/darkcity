@@ -15,10 +15,24 @@ import {
 
 import Navbar from "./Navbar";
 import AdBanner from "./AdBanner.jsx";
+import {
+  isVideoUnlocked,
+  unlockVideo
+} from "./utils/videoUnlock";
+
+import {
+  showRewardAd
+} from "./utils/adsgram";
+
+import LockedVideo from "./LockedVideo";
+import { spendCoins } from "./utils/coins";
+import { isVipUser } from "./utils/vip";
 
 
 export default function Watch() {
   const { id } = useParams();
+  const lastAdRef = useRef(0);
+  const lastSavedRef = useRef(0);
 
   const [video, setVideo] = useState(null);
   const [recommended, setRecommended] = useState([]);
@@ -28,6 +42,19 @@ export default function Watch() {
 const [adTimer, setAdTimer] = useState(null);
 const [geo, setGeo] = useState({ country: "BD", isHighCPM: false });
   const videoRef = useRef(null);
+  const [locked, setLocked] = useState(true);
+
+const [loadingUnlock, setLoadingUnlock] =
+  useState(true);
+  const videoViewsRef = useRef(0);
+const lastInterstitialRef = useRef(0);
+const [premiumUnlocked, setPremiumUnlocked] =
+  useState(false);
+        const viewedRef = useRef(false);
+
+  const isTelegram =
+  window.Telegram &&
+  window.Telegram.WebApp;
 
   useEffect(() => {
   const loadGeo = async () => {
@@ -37,32 +64,47 @@ const [geo, setGeo] = useState({ country: "BD", isHighCPM: false });
 
   loadGeo();
 }, []);
+
+
   /* ---------------- SAVE PROGRESS ---------------- */
   const saveProgress = async (percent) => {
-    if (!auth.currentUser) return;
+  if (!auth.currentUser) return;
 
-    await setDoc(
-      doc(db, "watchProgress", auth.currentUser.uid + "_" + id),
-      {
-        userId: auth.currentUser.uid,
-        videoId: id,
-        progress: percent,
-        updatedAt: Date.now(),
-      }
-    );
-  };
+  await setDoc(
+    doc(
+      db,
+      "watchHistory",
+      `${auth.currentUser.uid}_${id}`
+    ),
+    {
+      uid: auth.currentUser.uid,
+      videoId: id,
+      title: video.title,
+      image: video.image,
+      progress: percent,
+      updatedAt: Date.now(),
+    },
+    { merge: true }
+  );
+};
+const handleTimeUpdate = (e) => {
+  const current = e.target.currentTime;
+  const duration = e.target.duration;
 
-  const handleTimeUpdate = (e) => {
-    const current = e.target.currentTime;
-    const duration = e.target.duration;
-    const percent = Math.floor((current / duration) * 100);
+  if (!duration) return;
 
-        if (percent % 5 === 0) {
-          saveProgress(percent);
-        }
-
-    saveProgress(percent);
-  };
+  const percent = Math.floor(
+    (current / duration) * 100
+  );
+  
+if (
+  percent >= lastSavedRef.current + 5
+) {
+  lastSavedRef.current = percent;
+  saveProgress(percent);
+}
+}
+   
 
   /* ---------------- FETCH VIDEO ---------------- */
   useEffect(() => {
@@ -74,10 +116,26 @@ const [geo, setGeo] = useState({ country: "BD", isHighCPM: false });
       const data = { id: snap.id, ...snap.data() };
       setVideo(data);
 
-      await updateDoc(doc(db, "videos", id), {
-        views: increment(1),
-      });
 
+
+const handleTimeUpdate = async (e) => {
+  const current = e.target.currentTime;
+
+  if (
+    current >= 15 &&
+    !viewedRef.current
+  ) {
+    viewedRef.current = true;
+
+    await updateDoc(
+      doc(db, "videos", id),
+      {
+        views: increment(1),
+        todayViews: increment(1)
+      }
+    );
+  }
+};
       /* ---------------- EPISODES ---------------- */
       const all = await getDocs(collection(db, "videos"));
 
@@ -123,14 +181,79 @@ const [geo, setGeo] = useState({ country: "BD", isHighCPM: false });
   /* ---------------- PREMIUM CHECK ---------------- */
   const isPremiumLocked = () => {
     if (!video?.premium) return false;
+    
 
-    const user = auth.currentUser;
-    if (!user) return true;
+    const isVip =
+  userData?.premium &&
+  userData?.premiumExpire > Date.now();
 
+if (video?.premium && !premiumUnlocked && !isVip) {
+  return <LockedVideo />;
+}
     // NOTE: user premium check must come from users collection
     return false;
   };
+   useEffect(() => {
+  const checkPremiumUnlock = async () => {
 
+    if (!auth.currentUser || !video) return;
+
+    const userDoc = await getDoc(
+      doc(db, "users", auth.currentUser.uid)
+    );
+
+    if (
+      userDoc.exists() &&
+      userDoc.data().premium &&
+      userDoc.data().premiumExpire > Date.now()
+    ) {
+      setPremiumUnlocked(true);
+      return;
+    }
+
+    const key =
+      auth.currentUser.uid + "_" + id;
+
+    const snap = await getDoc(
+      doc(db, "premiumUnlocks", key)
+    );
+
+    setPremiumUnlocked(snap.exists());
+  };
+
+  checkPremiumUnlock();
+}, [video, id]);
+const unlockPremiumVideo = async () => {
+  const user = auth.currentUser;
+
+  if (!user) {
+    alert("Login Required");
+    return;
+  }
+
+  const cost = video?.coinCost || 50;
+
+  const success = await spendCoins(user.uid, cost);
+
+  if (!success) {
+    alert(`Need ${cost} Coins`);
+    return;
+  }
+
+  await setDoc(
+    doc(db, "premiumUnlocks", `${user.uid}_${id}`),
+    {
+      uid: user.uid,
+      videoId: id,
+      unlockedAt: Date.now()
+    }
+  );
+
+  setPremiumUnlocked(true);
+
+  alert("Premium Unlocked");
+};
+    
   /* ---------------- CONTINUE WATCHING RESTORE ---------------- */
   useEffect(() => {
     const restoreProgress = async () => {
@@ -170,64 +293,10 @@ const [geo, setGeo] = useState({ country: "BD", isHighCPM: false });
     restoreProgress();
   }, [video]);
 
- useEffect(() => {
-  if (!videoRef.current) return;
 
-  const video = videoRef.current;
 
-  let lastAdTime = 0;
 
-  const handleTimeUpdate = () => {
-    const current = video.currentTime;
 
-    // every 30 seconds trigger ad
-    if (current - lastAdTime >= 30 && current > 5) {
-      lastAdTime = current;
-
-      video.pause();
-      setShowAd(true);
-
-      // load Monetag ad
-      const s = document.createElement("script");
-      s.src = "https://al5sm.com/tag.min.js";
-      s.dataset.zone = "11112609";
-      s.async = true;
-      document.body.appendChild(s);
-    }
-  };
-
-  video.addEventListener("timeupdate", handleTimeUpdate);
-
-  return () => video.removeEventListener("timeupdate", handleTimeUpdate);
-}, [video]);
-
-useEffect(() => {
-  if (!videoRef.current) return;
-
-  const video = videoRef.current;
-
-  let lastAd = 0;
-
-  const handleTimeUpdate = () => {
-    const time = Math.floor(video.currentTime);
-
-    if (shouldShowAd(geo, time) && time - lastAd > 5) {
-      lastAd = time;
-
-      video.pause();
-
-      const s = document.createElement("script");
-      s.src = "https://al5sm.com/tag.min.js";
-      s.dataset.zone = "11112609";
-      s.async = true;
-      document.body.appendChild(s);
-    }
-  };
-
-  video.addEventListener("timeupdate", handleTimeUpdate);
-
-  return () => video.removeEventListener("timeupdate", handleTimeUpdate);
-}, [geo]);
 
 useEffect(() => {
   if (!showAd) return;
@@ -243,6 +312,77 @@ useEffect(() => {
   return () => clearTimeout(timer);
 }, [showAd]);
 
+useEffect(() => {
+  const checkUnlock = async () => {
+    const user = auth.currentUser;
+
+    if (!user) {
+      setLocked(true);
+      setLoadingUnlock(false);
+      return;
+    }
+
+    const unlocked = await isVideoUnlocked(
+      user.uid,
+      id
+    );
+
+    setLocked(!unlocked);
+    setLoadingUnlock(false);
+  };
+
+  checkUnlock();
+}, [id]);
+
+const handleUnlock = async () => {
+  try {
+    setLoadingUnlock(true);
+    console.log("Reward button clicked");
+    console.log("Reward received");
+
+    await showRewardAd();
+
+    const user = auth.currentUser;
+
+    if (!user) {
+      alert("Login Required");
+      return;
+    }
+
+    await unlockVideo(user.uid, id);
+
+    setLocked(false);
+
+    alert("Video Unlocked");
+  } catch (err) {
+    console.error(err);
+    alert("Ad not completed");
+  } finally {
+    setLoadingUnlock(false);
+  }
+};
+const claimDailyReward = async () => {
+  await showRewardAd();
+
+  await updateDoc(
+    doc(db, "users", auth.currentUser.uid),
+    {
+      coins: increment(20),
+      lastClaim: Date.now(),
+    }
+  );
+};
+const watchBonusAd = async () => {
+  await showRewardAd();
+
+  await updateDoc(
+    doc(db, "users", auth.currentUser.uid),
+    {
+      coins: increment(5),
+    }
+  );
+};
+
   if (!video) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -250,6 +390,7 @@ useEffect(() => {
       </div>
     );
   }
+  
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -263,26 +404,58 @@ useEffect(() => {
         </h1>
 
         {/* PREMIUM LOCK */}
-        {isPremiumLocked() ? (
-          <div className="p-10 bg-red-600 rounded-2xl text-center">
-            <h2 className="text-2xl font-bold">
-              Premium Required
+        {video?.premium && !premiumUnlocked ? (
+          <div className="bg-purple-900 p-8 rounded-xl text-center">
+            <h2 className="text-2xl font-bold mb-4">
+              🔒 Premium Video
             </h2>
+            <p className="mb-4">
+              Cost: {video.coinCost || 50} Coins
+            </p>
+            <button
+              onClick={unlockPremiumVideo}
+              className="bg-purple-600 px-5 py-3 rounded-lg"
+            >
+              Unlock With Coins
+            </button>
           </div>
         ) : (
           <video
-  id="darkcity-player"
-  ref={videoRef}
-  controls
-  autoPlay
-  playsInline
-  onTimeUpdate={handleTimeUpdate}
-  onEnded={playNext}
-  className="w-full h-[35vh] md:h-[70vh] bg-black rounded-2xl"
->
-  <source src={video.videoUrl} type="video/mp4" />
-</video>
+            id="darkcity-player"
+            ref={videoRef}
+            controls
+            autoPlay
+            playsInline
+            onTimeUpdate={handleTimeUpdate}
+            onEnded={playNext}
+            className="w-full h-[35vh] md:h-[70vh] bg-black rounded-2xl"
+          >
+            <source src={video.videoUrl} type="video/mp4" />
+          </video>
         )}
+        {/* COINS SECTION */}
+
+<div className="mt-6 bg-white/5 p-4 rounded-xl">
+
+  <h3 className="font-bold mb-3">
+    Earn Coins
+  </h3>
+
+  <button
+  onClick={claimDailyReward}
+>
+  🎁 Daily Reward
+</button>
+
+<button
+  onClick={watchBonusAd}
+>
+  💰 Watch Ad +5 Coins
+</button>
+
+
+</div>
+
 
         {showAd && (
   <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
@@ -326,33 +499,75 @@ useEffect(() => {
   </div>
 )}
 
+<AdBanner/>
+
         {/* RECOMMENDED */}
         <div className="mt-10">
-          <h2 className="text-2xl font-bold mb-4">
-            Recommended
-          </h2>
+  <h2 className="text-2xl font-bold mb-4">
+    Recommended
+  </h2>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {recommended.map((item) => (
-              <div
-                key={item.id}
-                onClick={() =>
-                  (window.location.href = "/watch/" + item.id)
-                }
-                className="bg-white/5 rounded-xl overflow-hidden cursor-pointer"
-              >
-                <img src={item.image} 
-                  className="w-full h-40 object-cover"
-                />
-                <div className="p-3">
-                  <h3 className="font-bold">{item.title}</h3>
-                </div>
-              </div>
-            ))}
-          </div>
+  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+    {recommended.map((item) => (
+      <div
+        key={item.id}
+        onClick={() =>
+          (window.location.href = "/watch/" + item.id)
+        }
+        className="
+          group
+          cursor-pointer
+          bg-zinc-900
+          rounded-2xl
+          overflow-hidden
+          hover:scale-105
+          transition-all
+          duration-300
+          hover:shadow-lg
+        "
+      >
+        <div className="relative">
+          {item.premium && (
+            <div className="
+              absolute
+              top-2
+              right-2
+              bg-purple-600
+              text-white
+              text-xs
+              px-2
+              py-1
+              rounded-lg
+              z-10
+            ">
+              Premium
+            </div>
+          )}
+
+          <img
+            src={item.image}
+            alt={item.title}
+            className="
+              w-full
+              h-40
+              object-cover
+              group-hover:scale-110
+              transition
+              duration-300
+            "
+          />
         </div>
 
+        <div className="p-3">
+          <h3 className="font-bold line-clamp-2">
+            {item.title}
+          </h3>
+        </div>
       </div>
-    </div>
+    ))}
+  </div>
+</div>
+          </div>
+        </div>
   );
 }

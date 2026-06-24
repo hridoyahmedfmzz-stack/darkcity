@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "./firebase/firebase-config";
+import { auth ,db } from "./firebase/firebase-config";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
@@ -11,19 +13,43 @@ export default function AdminLogin() {
     setLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
+  auth,
+  email,
+  password
+);
 
-      console.log("Login Success:", userCredential.user);
-      window.location.href = "/Admin";
+const uid = userCredential.user.uid;
+
+// Firestore user check
+const userRef = doc(db, "users", uid);
+const userSnap = await getDoc(userRef);
+
+if (userSnap.exists()) {
+  const data = userSnap.data();
+
+  // VIP expired?
+  if (
+    data.premium &&
+    data.premiumExpire &&
+    data.premiumExpire < Date.now()
+  ) {
+    await updateDoc(userRef, {
+      premium: false
+    });
+  }
+}
+
+console.log("Login Success:", userCredential.user);
+
+window.location.href = "/admin";
+      console.log("Login UID:", userCredential.user.uid);
     } catch (err) {
       alert(err.message);
     } finally {
       setLoading(false);
     }
   };
+  
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-black px-4">

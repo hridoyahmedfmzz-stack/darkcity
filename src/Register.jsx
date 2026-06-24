@@ -1,13 +1,15 @@
 import { useState } from "react";
 import Navbar from "./Navbar";
 import AdBanner from "./AdBanner.jsx";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+
 
 import {
   createUserWithEmailAndPassword,
   updateProfile
 } from "firebase/auth";
 
-import { auth } from "./firebase/firebase-config";
+import { db, auth } from "./firebase/firebase-config";
 
 export default function Register(){
 
@@ -21,27 +23,38 @@ export default function Register(){
 
  const handleRegister = async () => {
   try {
-
     const userCredential =
-  await createUserWithEmailAndPassword(
-    auth,
-    email,
-    password
-  );
+      await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
 
-await updateProfile(
-  userCredential.user,
-  {
-    displayName: name
-  }
-);
+    await updateProfile(
+      userCredential.user,
+      {
+        displayName: name,
+      }
+    );
 
-await userCredential.user.reload();
+    await setDoc(
+      doc(db, "users", userCredential.user.uid),
+      {
+        uid: userCredential.user.uid,
+        name: name,
+        email: email,
+        role: "user",
+        premium: false,
+        createdAt: serverTimestamp(),
+      }
+    );
 
-alert("Register Success");
+    await userCredential.user.reload();
 
+    alert("Register Success");
   } catch (error) {
     console.log(error);
+    alert(error.message);
   }
 };
 

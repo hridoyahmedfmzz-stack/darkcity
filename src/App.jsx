@@ -24,11 +24,16 @@ import Navbar from "./Navbar";
 import AllVideos from "./AllVideos";
 import SuperAdminRoute from "./SuperAdminRoute";
 import AdminControl from "./AdminControl";
-
-
+import History from "./History";
+import Profile from "./Profile";
 
 import { loadAds } from "./AdManager";
 import { db, auth } from "./firebase/firebase-config";
+import { checkVipExpiry } from "./utils/vip";
+import VipPage from "./VipPage";
+import VipRequests from "./VipRequests";
+import SuperAdmin from "./SuperAdmin";
+
 
 import {
   doc,
@@ -64,14 +69,14 @@ export default function App() {
       <Route path="/contact" element={<Contact />} />
       <Route path="/about" element={<About />} />
       <Route path="/all-videos" element={<AllVideos />} />
-      <Route
-  path="/admin/control"
-  element={
-    <SuperAdminRoute>
-      <AdminControl />
-    </SuperAdminRoute>
-  }
-/>
+      <Route path="/superadmin" element={<AdminControl />} />
+      <Route path="/history" element={<History />} />
+      <Route path="/profile" element={<Profile />}/>
+      <Route path="/vip" element={<VipPage />}/>
+      <Route path="/vip-requests" element={<VipRequests />} />
+      <Route path="/super-admin" element={<SuperAdmin />} />
+      <Route path="/admin/vip" element={<VipRequests />} />
+
     </Routes>
     
   );
@@ -92,9 +97,13 @@ function HomePage() {
 
   const [currentSlide, setCurrentSlide] = useState(0);
   const [showAllVideos, setShowAllVideos] = useState(false);
-const [featuredVideos, setFeaturedVideos] = useState([]);
+  const [featured, setFeatured] = useState([]);
+const [mostViewed, setMostViewed] = useState([]);
+const [premiumVideos, setPremiumVideos] = useState([]);
+
 
 const location = useLocation();
+
 
 // VISITIR
 useEffect(() => {
@@ -127,20 +136,17 @@ const q = query(
   limit(30)
 );
 
-const snapshot = await getDocs(q);
 
-const movieList = snapshot.docs.map((doc) => ({
-  id: doc.id,
-  ...doc.data(),
-}));
-      
 
-      querySnapshot.forEach((doc) => {
-        movieList.push({
-          id: doc.id,
-          ...doc.data(),
-        });
-      });
+const movieList = [];
+
+querySnapshot.forEach((doc) => {
+  movieList.push({
+    id: doc.id,
+    ...doc.data(),
+  });
+});
+
       movieList.sort((a, b) => {
   const aTime =
     a.createdAt?.seconds ||
@@ -168,36 +174,188 @@ movieList.forEach((video) => {
 
   grouped[name].push(video);
 });
+setMovies(grouped);
 
-      setTrending(
-        Object.entries(grouped).map(([name, eps]) => ({
-          id: name,
-          title: name,
-          image: eps?.[0]?.image || "",
-          views: eps.reduce((sum, v) => sum + (v.views || 0), 0),
-        }))
-      );
+      const snap = await getDocs(collection(db, "videos"));
 
-      setNewVideos(
-  Object.entries(grouped)
-    .map(([name, eps]) => ({
-      id: name,
-      title: name,
-      image: eps[0]?.image || "",
-      createdAt: eps[0]?.createdAt || null,
-    }))
-    .sort((a, b) => {
-      const aTime = a.createdAt?.seconds || 0;
-      const bTime = b.createdAt?.seconds || 0;
-      return bTime - aTime;
-    })
+const arr = [];
+
+snap.forEach((doc) => {
+  arr.push({
+    id: doc.id,
+    ...doc.data(),
+  });
+});
+
+const trendingGrouped = {};
+
+arr.forEach((video) => {
+  const key = video.series || video.title;
+
+  if (!trendingGrouped[key]) {
+    trendingGrouped[key] = [];
+  }
+
+  trendingGrouped[key].push(video);
+});
+
+const trendingData = Object.entries(
+  trendingGrouped
+).map(([name, episodes]) => ({
+  id: episodes.length > 1
+    ? name
+    : episodes[0].id,
+
+  title: name,
+  image: episodes[0]?.image,
+
+  type:
+    episodes.length > 1
+      ? "series"
+      : "single",
+
+  views: episodes.reduce(
+    (sum, ep) =>
+      sum + (ep.todayViews || 0),
+    0
+  ),
+
+  premium: episodes.some(
+    (ep) => ep.premium
+  ),
+
+  featured: episodes.some(
+    (ep) => ep.featured
+  ),
+
+  series: name,
+}));
+
+trendingData.sort(
+  (a, b) => b.views - a.views
+);
+
+setTrending(
+  trendingData.slice(0, 20)
+);
+
+      const newReleaseData = Object.entries(grouped)
+  .map(([name, eps]) => ({
+    id:
+      eps.length > 1
+        ? name
+        : eps[0].id,
+
+    title: name,
+    image: eps[0]?.image || "",
+
+    type:
+      eps.length > 1
+        ? "series"
+        : "single",
+
+    premium: eps.some(
+      (ep) => ep.premium
+    ),
+
+    featured: eps.some(
+      (ep) => ep.featured
+    ),
+
+    views: eps.reduce(
+      (sum, ep) =>
+        sum + (ep.views || 0),
+      0
+    ),
+
+    createdAt:
+      eps[0]?.createdAt || null,
+
+    series: name,
+  }))
+  .sort((a, b) => {
+    const aTime =
+      a.createdAt?.seconds || 0;
+
+    const bTime =
+      b.createdAt?.seconds || 0;
+
+    return bTime - aTime;
+  });
+
+setNewVideos(
+  newReleaseData.slice(0, 20)
 );
 
       const singles = movieList
         .filter((v) => v.type === "single")
         .slice(0, 12);
 
-      setFeaturedVideos(singles);
+     const featuredItems = [];
+
+Object.entries(grouped).forEach(([name, episodes]) => {
+  if (!episodes.some((ep) => ep.featured)) return;
+
+  if (episodes.length === 1) {
+    featuredItems.push({
+      ...episodes[0],
+      type: "single",
+    });
+  } else {
+    featuredItems.push({
+      id: name,
+      title: name,
+      image: episodes[0]?.image,
+      type: "series",
+      featured: true,
+      premium: episodes.some(
+        (ep) => ep.premium
+      ),
+      views: episodes.reduce(
+        (sum, ep) => sum + (ep.views || 0),
+        0
+      ),
+    });
+  }
+});
+
+setFeatured(featuredItems);
+
+const premiumSingles = movieList.filter(
+  (v) => v.premium && v.type === "single"
+);
+
+const premiumItems = [];
+
+Object.entries(grouped).forEach(([name, episodes]) => {
+  if (!episodes.some((ep) => ep.premium)) return;
+
+  if (episodes.length === 1) {
+    premiumItems.push({
+      ...episodes[0],
+      type: "single",
+      premium: true,
+    });
+  } else {
+    premiumItems.push({
+      id: name,
+      title: name,
+      image: episodes[0]?.image,
+      premium: true,
+      type: "series",
+      views: episodes.reduce(
+        (sum, ep) => sum + (ep.views || 0),
+        0
+      ),
+    });
+  }
+});
+if (!isVipUser(userData)) {
+  loadAds();
+}
+
+setPremiumVideos(premiumItems);
+
 
     } catch (err) {
       console.log("FETCH ERROR:", err);
@@ -227,24 +385,39 @@ useEffect(() => {
 
   /* ---------- AUTH ---------- */
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setCurrentUser(user);
 
-        const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
+const unsubscribe = onAuthStateChanged(auth, async (user) => {
 
-        if (userSnap.exists()) {
-          setUserData(userSnap.data());
-        }
-      } else {
-        setCurrentUser(null);
-        setUserData(null);
-      }
-    });
+if (user) {
 
-    return () => unsubscribe();
-  }, []);
+setCurrentUser(user);
+
+await checkVipExpiry(user.uid);
+
+const userRef = doc(db, "users", user.uid);
+
+const userSnap = await getDoc(userRef);
+
+if (userSnap.exists()) {
+
+setUserData(userSnap.data());
+
+}
+
+} else {
+
+setCurrentUser(null);
+
+setUserData(null);
+
+}
+
+});
+
+return () => unsubscribe();
+
+}, []);
+  
 
   const [continueWatching, setContinueWatching] = useState([]);
 
@@ -269,6 +442,17 @@ useEffect(() => {
 
   fetchProgress();
 }, [currentUser]);
+
+useEffect(() => {
+
+  const user = auth.currentUser;
+
+  if (user) {
+    checkVipExpiry(user.uid);
+  }
+
+}, []);
+
 
   /* ---------- SEARCH FILTER ---------- */
   const filteredTrending = trending.filter((item) =>
@@ -325,7 +509,11 @@ const filteredNew = newVideos.filter((item) =>
   return (
     <div className="min-h-screen bg-gradient-to-b from-black via-[#0a0a0a] to-black text-white">
       
-<Navbar search={search} setSearch={setSearch} />
+<Navbar
+  search={search}
+  setSearch={setSearch}
+  userData={userData}
+/>
 
       {/* HERO */}
      <div className="relative">
@@ -335,10 +523,16 @@ const filteredNew = newVideos.filter((item) =>
   <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/60" />
 </div>
       <AdBanner />
+      <NetflixRow
+  title="Premium Videos"
+  items={premiumVideos}
+  userData={userData}
+/>
+
 
       <NetflixRow
   title=" Featured Videos"
-  items={featuredVideos}
+  items={featured}
 />
 
       {/* TRENDING */}

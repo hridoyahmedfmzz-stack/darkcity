@@ -42,14 +42,17 @@ export default function AllVideos() {
         });
 
         // Create series cards
-        const data = Object.entries(grouped).map(([name, episodes]) => ({
-          id: name,
-          title: name,
-          image: episodes[0]?.image || "",
-          episodes: episodes.length,
-          views: episodes.reduce((sum, v) => sum + (v.views || 0), 0),
-          createdAt: episodes[0]?.createdAt || null,
-        }));
+       const data = Object.entries(grouped).map(([name, episodes]) => ({
+  id: name,
+  title: name,
+  image: episodes[0]?.image || "",
+  episodes: episodes.length,
+  views: episodes.reduce((sum, v) => sum + (v.views || 0), 0),
+  createdAt: episodes[0]?.createdAt || null,
+
+  premium: episodes.some(ep => ep.premium),
+  featured: episodes.some(ep => ep.featured),
+}));
 
         // Sort by latest upload time
         data.sort((a, b) => {
@@ -109,11 +112,26 @@ export default function AllVideos() {
             }
             className="bg-white/5 rounded-xl overflow-hidden cursor-pointer hover:scale-105 transition duration-300"
           >
-            <img
-              src={series.image}
-              alt={series.title}
-              className="w-full h-72 object-cover"
-            />
+            
+            <div className="relative">
+  <img
+    src={series.image}
+    alt={series.title}
+    className="w-full h-72 object-cover"
+  />
+
+  {series.premium && (
+    <div className="absolute top-2 right-2 bg-purple-600 px-2 py-1 rounded text-xs font-bold">
+      Premium
+    </div>
+  )}
+
+  {series.featured && (
+    <div className="absolute top-2 left-2 bg-yellow-500 px-2 py-1 rounded text-xs font-bold text-black">
+      Featured
+    </div>
+  )}
+</div>
 
             <div className="p-3">
               <h3 className="font-bold text-lg truncate">

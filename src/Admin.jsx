@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { db, auth } from "./firebase/firebase-config";
 import { onAuthStateChanged } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 import {
   collection,
   addDoc,
@@ -10,8 +11,10 @@ import {
   getDoc,
   updateDoc,
   serverTimestamp,
-  query, orderBy
+  query, orderBy,
+  onSnapshot,
 } from "firebase/firestore";
+import AdminControl from "./AdminControl";
 
 /* ================= ADMIN ================= */
 
@@ -53,6 +56,10 @@ const [selectedEpisodeId, setSelectedEpisodeId] = useState(null);
   const [openSeries, setOpenSeries] = useState(null);
 const [search, setSearch] = useState("");
 const [visitorCount, setVisitorCount] = useState(0);
+const [isSuperAdmin, setIsSuperAdmin] = useState(true);
+  const [seriesFeatured, setSeriesFeatured] = useState(false);
+  const [seriesPremium, setSeriesPremium] = useState(false);
+const navigate = useNavigate();
 
 // VISITOR
 useEffect(() => {
@@ -98,24 +105,38 @@ useEffect(() => {
   return () => observer.disconnect();
 }, []);
   /* ================= AUTH ================= */
-  
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        window.location.href = "/admin/login";
-        return;
-      }
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      window.location.href = "/admin/login";
+      return;
+    }
 
-      const adminDoc = await getDoc(doc(db, "admin", user.uid));
+    const adminDoc = await getDoc(
+      doc(db, "admin", user.uid)
+    );
 
-      if (!adminDoc.exists()) {
-        alert("Access Denied");
-        window.location.href = "/";
-      }
-    });
+    if (!adminDoc.exists()) {
+      alert("Access Denied");
+      window.location.href = "/";
+      return;
+    }
 
-    return () => unsub();
-  }, []);
+    const adminData = adminDoc.data();
+
+    console.log("Admin:", adminData);
+
+    if (
+      adminData.role === "superadmin" ||
+      adminData.isSuperAdmin === true
+    ) {
+      setIsSuperAdmin(true);
+    }
+  });
+
+  return () => unsubscribe();
+}, []);
+ 
 
   /* ================= LOAD ================= */
   useEffect(() => {
@@ -176,22 +197,18 @@ useEffect(() => {
     });
 
     const sortedVideos = Object.values(grouped).sort((a, b) => {
-  const aLatest = Math.max(
-    ...a.episodes.map(
-      (ep) => ep.createdAt?.seconds || 0
-    )
-  );
+      const aLatest = Math.max(
+        ...a.episodes.map((ep) => ep.createdAt?.seconds || 0)
+      );
 
-  const bLatest = Math.max(
-    ...b.episodes.map(
-      (ep) => ep.createdAt?.seconds || 0
-    )
-  );
+      const bLatest = Math.max(
+        ...b.episodes.map((ep) => ep.createdAt?.seconds || 0)
+      );
 
-  return bLatest - aLatest;
-});
+      return bLatest - aLatest;
+    });
 
-setVideos(sortedVideos);
+    setVideos(sortedVideos);
 
   } catch (error) {
     console.log(error);
@@ -226,6 +243,8 @@ setVideos(sortedVideos);
     setTotalViews(views);
   };
 
+ 
+
   /* ================= UPLOAD ================= */
   const handleUpload = async () => {
   if (!title || !videoFiles.length || !imageFiles.length) {
@@ -249,13 +268,14 @@ setVideos(sortedVideos);
       );
 
       await addDoc(collection(db, "videos"), {
-        title,
-        image: imageData.url,
-        videoUrl: videoData.url,
-        type: "single",
-        premium,
+  title,
+  image: imageData.url,
+  videoUrl: videoData.url,
+  type: "single",
+  featured: seriesFeatured,
+  premium: premium,
+        coinCost: 50,
         views: 0,
-        createdAt: Date.now(),
         createdAt: serverTimestamp(),
       });
     }
@@ -274,19 +294,22 @@ setVideos(sortedVideos);
         );
 
         await addDoc(collection(db, "videos"), {
-          title: `${title} VIDEO ${i + 1}`,
-          series: title,
-          episode: i + 1,
-          image: imageData.url,
-          videoUrl: videoData.url,
-          premium,
+  title: `${title} VIDEO ${i + 1}`,
+  series: title,
+  episode: i + 1,
+  image: imageData.url,
+  videoUrl: videoData.url,
+  featured: seriesFeatured,
+  premium: premium,
+          coinCost: 50,
+          todayViews: 0,
           views: 0,
           order: i + 1,
-          createdAt: Date.now(),
           createdAt: serverTimestamp(),
         });
       }
     }
+    
 
     alert("Upload Success");
 
@@ -294,6 +317,7 @@ setVideos(sortedVideos);
     setVideoFiles([]);
     setImageFiles([]);
     setPremium(false);
+    
 
     loadVideos();
   } catch (err) {
@@ -405,13 +429,14 @@ const moveEpisode = (from, to) => {
       const ep = editEpisodes[i];
 
       const updateData = {
-        title: ep.title,
-        series: editSeriesName,
-        episode: i + 1,
-        order: i + 1,
-        premium: ep.premium || false,
-      };
-
+  title: ep.title,
+  series: editSeriesName,
+  episode: i + 1,
+  order: i + 1,
+  premium: Boolean(ep.premium),
+  featured: Boolean(ep.featured),
+  coinCost: 50,
+};
       // thumbnail selected হলে সব episode এ update হবে
       if (imageUrl) {
         updateData.image = imageUrl;
@@ -471,7 +496,33 @@ const deleteSeries = async (seriesName) => {
     console.log(err);
   }
 };
-  
+
+const loadVipRequests = async () => {
+  const snap = await getDocs(
+    collection(db, "vipRequests")
+  );
+
+  const arr = [];
+
+  for (const item of snap.docs) {
+    const data = item.data();
+
+    const userSnap = await getDoc(
+      doc(db, "users", data.uid)
+    );
+
+    arr.push({
+      id: item.id,
+      ...data,
+      user: userSnap.exists()
+        ? userSnap.data()
+        : null
+    });
+  }
+  console.log("VIP Requests:", arr);
+
+  setVipRequests(arr);
+};
 
   /* ================= UI ================= */
   return (
@@ -479,6 +530,44 @@ const deleteSeries = async (seriesName) => {
       <h1 className="text-4xl font-black text-red-600 mb-6">
         DARKCITY ADMIN
       </h1>
+<div className="flex gap-3 mb-8 flex-wrap">
+
+  <button
+    onClick={() =>
+      window.location.href="/admin/vip"
+    }
+    className="
+    bg-yellow-500
+    text-black
+    px-5
+    py-3
+    rounded-xl
+    font-bold"
+  >
+    ⭐ VIP Requests
+  </button>
+
+  {isSuperAdmin && (
+
+    <button
+      onClick={() =>
+        window.location.href="/super-admin"
+      }
+      className="
+      bg-red-600
+      px-5
+      py-3
+      rounded-xl
+      font-bold"
+    >
+      👑 Super Admin
+    </button>
+
+  )}
+
+</div>
+
+
 
       {/* STATS */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-10">
@@ -488,6 +577,9 @@ const deleteSeries = async (seriesName) => {
         <div className="bg-yellow-500 text-black p-4 rounded-xl">Premium: {premiumUsers}</div>
         <div className="bg-purple-600 p-4 rounded-xl">Views: {totalViews}</div>
       </div>
+
+      
+
 
 
       {/* UPLOAD */}
@@ -510,6 +602,17 @@ const deleteSeries = async (seriesName) => {
           multiple
           onChange={(e) => setVideoFiles([...e.target.files])}
         />
+        <label>
+          <input
+  type="checkbox"
+  checked={seriesFeatured}
+  onChange={(e) =>
+    setSeriesFeatured(e.target.checked)
+  }
+/>
+Featured
+</label>
+        
 
         <label>
           <input
@@ -519,6 +622,7 @@ const deleteSeries = async (seriesName) => {
           />
           Premium
         </label>
+        
 
         <button
           onClick={handleUpload}
@@ -537,6 +641,8 @@ const deleteSeries = async (seriesName) => {
           className="w-full p-3 rounded-xl bg-black border border-gray-700"
         />
       </div>
+
+      
 
       {/* SERIES GRID */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -560,10 +666,18 @@ const deleteSeries = async (seriesName) => {
 
   <button
     onClick={() => {
-      setEditMode(series.seriesName);
-      setEditSeriesName(series.seriesName);
-      setEditEpisodes(series.episodes);
-    }}
+  setEditMode(series.seriesName);
+  setEditSeriesName(series.seriesName);
+  setEditEpisodes(series.episodes);
+
+  setSeriesPremium(
+    series.episodes.some(ep => ep.premium)
+  );
+
+  setSeriesFeatured(
+    series.episodes.some(ep => ep.featured)
+  );
+}}
     className="flex-1 bg-blue-600 py-2 rounded-xl"
   >
     Manage
@@ -592,7 +706,33 @@ const deleteSeries = async (seriesName) => {
                     <div>
                       <p className="text-sm font-bold">{ep.title}</p>
                       <p className="text-xs text-gray-400">Episode {ep.episode}</p>
+                      <div className="flex gap-4 mt-2">
+
+  <label className="flex gap-2">
+  <input
+    type="checkbox"
+    checked={seriesPremium}
+    onChange={(e) =>
+      setSeriesPremium(e.target.checked)
+    }
+  />
+  Premium
+</label>
+
+<label className="flex gap-2">
+  <input
+    type="checkbox"
+    checked={seriesFeatured}
+    onChange={(e) =>
+      setSeriesFeatured(e.target.checked)
+    }
+  />
+  Featured
+</label>
+
+</div>
                     </div>
+                    
 
                     <div className="flex gap-2">
                       <button
@@ -621,143 +761,116 @@ const deleteSeries = async (seriesName) => {
         <div className="fixed inset-0 bg-black/95 p-3 sm:p-6 overflow-y-auto z-50">
           <h1 className="text-2xl font-bold mb-4">Edit Series: {editSeriesName}</h1>
 
-          {/* SERIES NAME */}
           <input
             value={editSeriesName}
             onChange={(e) => setEditSeriesName(e.target.value)}
             className="w-full p-3 bg-black border mb-4"
             placeholder="Series Name"
           />
+
           <div className="grid grid-cols-1 gap-3 mt-3">
+            <div className="bg-zinc-900 p-3 rounded-xl mb-4">
+              <p className="text-xs text-gray-400 mb-2">Series Thumbnail</p>
+              <input
+                type="file"
+                accept="image/*"
+                className="w-full text-sm"
+                onChange={(e) => setNewSeriesImage(e.target.files[0])}
+              />
+            </div>
 
-  <div className="bg-zinc-900 p-3 rounded-xl">
-    <p className="text-xs text-gray-400 mb-2">
-      Thumbnail
-    </p>
+              <label className="flex items-center gap-2 mb-4">
+  <input
+    type="checkbox"
+    checked={seriesFeatured}
+    onChange={(e) => {
+      const value = e.target.checked;
 
-    <input
-  type="file"
-  accept="image/*"
-  className="w-full text-sm"
-  onChange={(e) => setNewSeriesImage(e.target.files[0])}
-/>
-  </div>
-          <button
-            onClick={() => setEditMode(null)}
-            className="bg-red-600 px-4 py-2 rounded-xl"
-          >
-            Close
-          </button>
+      setEditEpisodes(
+        editEpisodes.map((ep) => ({
+          ...ep,
+          premium: value,
+        }))
+      );
+    }}
+  />
+  Premium All Episodes
+</label>
+          </div>
 
-          {/* EPISODES DRAG LIST */}
-          <div className="space-y-3">
+          <div className="space-y-3 mt-6">
             {editEpisodes.map((ep, index) => (
               <div
                 key={ep.id}
-                className="
-bg-white/5
-border border-white/10
-rounded-2xl
-p-4
-space-y-4
-">
+                className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-4"
+              >
                 <div>
                   <input
-  value={ep.title}
-  onChange={(e) => {
-    const updated = [...editEpisodes];
-    updated[index].title = e.target.value;
-    setEditEpisodes(updated);
-  }}
-  className="w-full bg-zinc-900 border border-zinc-700 p-3 rounded-xl text-sm"
-/>
+                    value={ep.title}
+                    onChange={(e) => {
+                      const updated = [...editEpisodes];
+                      updated[index].title = e.target.value;
+                      setEditEpisodes(updated);
+                    }}
+                    className="w-full bg-zinc-900 border border-zinc-700 p-3 rounded-xl text-sm"
+                  />
+
+                  <label className="flex items-center gap-2">
+  <input
+    type="checkbox"
+    checked={ep.premium || false}
+    onChange={(e) => {
+      const updated = [...editEpisodes];
+
+      updated[index] = {
+        ...updated[index],
+        premium: e.target.checked,
+      };
+
+      setEditEpisodes(updated);
+    }}
+  />
+
+  Premium
+</label>
                   <p className="text-xs text-gray-400">Episode {index + 1}</p>
                 </div>
-                {/* THUMBNAIL CHANGE */}
-<div className="grid grid-cols-1 gap-3 mt-3">
 
-  <div className="bg-zinc-900 p-3 rounded-xl">
-    <p className="text-xs text-gray-400 mb-2">
-      Thumbnail
-    </p>
+                <div className="grid grid-cols-1 gap-3 mt-3">
+                  <div className="bg-zinc-900 p-3 rounded-xl">
+                    <p className="text-xs text-gray-400 mb-2">Thumbnail</p>
+                    <input type="file" accept="image/*" className="w-full text-sm" />
+                  </div>
 
-    <input
-      type="file"
-      accept="image/*"
-      className="w-full text-sm"
-    />
-  </div>
-
-  <div className="bg-zinc-900 p-3 rounded-xl">
-    <p className="text-xs text-gray-400 mb-2">
-      Video
-    </p>
-
-    <input
-      type="file"
-      accept="video/*"
-      className="w-full text-sm"
-    />
-  </div>
-
-</div>
+                  <div className="bg-zinc-900 p-3 rounded-xl">
+                    <p className="text-xs text-gray-400 mb-2">Video</p>
+                    <input type="file" accept="video/*" className="w-full text-sm" />
+                  </div>
+                </div>
 
                 <div className="flex justify-end gap-2">
-  <button
-    onClick={() => moveEpisode(index, index - 1)}
-    className="bg-blue-600 px-4 py-2 rounded-xl"
-  >
-    ↑ Up
-  </button>
-
-  <button
-    onClick={() => moveEpisode(index, index + 1)}
-    className="bg-blue-600 px-4 py-2 rounded-xl"
-  >
-    ↓ Down
-  </button>
-
-<button
-  onClick={async () => {
-    if (!window.confirm("Delete this episode?")) return;
-
-    await deleteDoc(doc(db, "videos", ep.id));
-
-    setEditEpisodes(
-      editEpisodes.filter((item) => item.id !== ep.id)
-    );
-
-    loadVideos();
-  }}
-  className="bg-red-600 px-4 py-2 rounded-xl"
->
-  Delete
-</button>
-
-</div>
+                  <button onClick={() => moveEpisode(index, index - 1)} className="bg-blue-600 px-4 py-2 rounded-xl">↑ Up</button>
+                  <button onClick={() => moveEpisode(index, index + 1)} className="bg-blue-600 px-4 py-2 rounded-xl">↓ Down</button>
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm("Delete this episode?")) return;
+                      await deleteDoc(doc(db, "videos", ep.id));
+                      setEditEpisodes(editEpisodes.filter((item) => item.id !== ep.id));
+                      loadVideos();
+                    }}
+                    className="bg-red-600 px-4 py-2 rounded-xl"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-        </div>
 
-          
-
-
-          {/* SAVE BUTTON */}
-          <button
-  onClick={saveSeriesUpdate}
-  className="bg-green-600 px-6 py-3 rounded-xl mt-5"
->
-  {loading ? "Saving..." : "Save Full"}
-</button>
-  
-
-          <button
-            onClick={() => setEditMode(null)}
-            className="bg-red-600 px-6 py-3 rounded-xl mt-3 ml-3"
-          >
-            Close
-          </button>
+          <div className="mt-6">
+            <button onClick={saveSeriesUpdate} className="bg-green-600 px-6 py-3 rounded-xl">{loading ? "Saving..." : "Save Full"}</button>
+            <button onClick={() => setEditMode(null)} className="bg-red-600 px-6 py-3 rounded-xl ml-3">Close</button>
+          </div>
         </div>
       )}
     </div>

@@ -2,11 +2,19 @@ import { useEffect } from "react";
 
 export default function AdBanner() {
   useEffect(() => {
-    const script1 = document.createElement("script");
+    const container =
+      document.getElementById("top-banner-ad");
 
-    script1.innerHTML = `
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    const configScript =
+      document.createElement("script");
+
+    configScript.innerHTML = `
       atOptions = {
-        'key' : 'c0e6f5c4b4c8764bf12f66ee9679772e',
+        'key' : 'fe7247a8fd56a44b200590ff9b16325b',
         'format' : 'iframe',
         'height' : 90,
         'width' : 728,
@@ -14,36 +22,34 @@ export default function AdBanner() {
       };
     `;
 
-    const script2 = document.createElement("script");
-    script2.src =
-      "https://www.highperformanceformat.com/c0e6f5c4b4c8764bf12f66ee9679772e/invoke.js";
-    script2.async = true;
+    const invokeScript =
+      document.createElement("script");
 
-    document.getElementById("adsterra-banner")
-      ?.appendChild(script1);
+    invokeScript.src =
+      "https://www.highperformanceformat.com/fe7247a8fd56a44b200590ff9b16325b/invoke.js";
 
-    document.getElementById("adsterra-banner")
-      ?.appendChild(script2);
+    invokeScript.async = true;
+
+    container.appendChild(configScript);
+    container.appendChild(invokeScript);
+
+    return () => {
+      container.innerHTML = "";
+    };
   }, []);
 
   return (
-    <div
-      id="adsterra-banner"
-      className="flex justify-center py-6"
-    />
+    <div className="flex justify-center my-4">
+      <div id="top-banner-ad"></div>
+    </div>
   );
 }
-export const loadAds = () => {
-  if (
-    window.location.pathname.startsWith("/admin")
-  ) {
-    return;
-  }
+{/* Mobile */}
+<div className="block md:hidden">
+  <MobileBanner />
+</div>
 
-  const s = document.createElement("script");
-  s.src =
-    "https://5gvci.com/act/files/tag.min.js?z=11112615";
-  s.async = true;
-
-  document.body.appendChild(s);
-};
+{/* Desktop */}
+<div className="hidden md:block">
+  <DesktopBanner />
+</div>
