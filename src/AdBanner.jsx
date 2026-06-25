@@ -44,12 +44,3 @@ export default function AdBanner() {
     </div>
   );
 }
-{/* Mobile */}
-<div className="block md:hidden">
-  <MobileBanner />
-</div>
-
-{/* Desktop */}
-<div className="hidden md:block">
-  <DesktopBanner />
-</div>
