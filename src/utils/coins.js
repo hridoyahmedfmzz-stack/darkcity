@@ -27,10 +27,14 @@ export async function getUserCoins(uid) {
 }
 
 export async function addCoins(uid, amount) {
-  await updateDoc(
+
+  await setDoc(
     doc(db, "users", uid),
     {
       coins: increment(amount)
+    },
+    {
+      merge: true
     }
   );
 }
