@@ -146,31 +146,38 @@ useEffect(() => {
   
 
   /* ================= CLOUDINARY ================= */
-  const uploadToCloudinary = async (file, type) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", "darkcity");
+  const CLOUD_NAME = "ezp1bodj";
+const UPLOAD_PRESET = "ml_darkcity";
 
-    const url =
-      type === "video"
-        ? "https://api.cloudinary.com/v1_1/dpzu3ehtm/video/upload"
-        : "https://api.cloudinary.com/v1_1/dpzu3ehtm/image/upload";
+const uploadToCloudinary = async (file, type) => {
+  const formData = new FormData();
 
-    const res = await fetch(url, {
-      method: "POST",
-      body: formData,
-    });
+  formData.append("file", file);
+  formData.append("upload_preset", UPLOAD_PRESET);
 
-    const data = await res.json();
+  const url =
+    type === "video"
+      ? `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`
+      : `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
 
-    if (!data.secure_url) throw new Error("Upload Failed");
+  const res = await fetch(url, {
+    method: "POST",
+    body: formData,
+  });
 
-    return {
-      url: data.secure_url,
-      publicId: data.public_id,
-    };
+  const data = await res.json();
+
+  console.log(data);
+
+  if (!res.ok) {
+    throw new Error(data.error?.message || "Cloudinary Upload Failed");
+  }
+
+  return {
+    url: data.secure_url,
+    publicId: data.public_id,
   };
-
+};
   /* ================= LOAD VIDEOS ================= */
   const loadVideos = async () => {
   try {
@@ -220,14 +227,20 @@ useEffect(() => {
   const loadAnalytics = async () => {
     const today = new Date().toISOString().split("T")[0];
 
-    const visitorSnap = await getDoc(doc(db, "analytics", today));
-    setTodayVisitors(visitorSnap.exists() ? visitorSnap.data().visitors : 0);
+    const visitorSnap = await getDocs(collection(db,"visitors"));
+setTodayVisitors(visitorSnap.size);
 
     const usersSnap = await getDocs(collection(db, "users"));
     let premiumCount = 0;
 
     usersSnap.forEach((u) => {
-      if (u.data().premium) premiumCount++;
+      if (
+    u.data().premium === true &&
+    (u.data().premiumExpire || 0) > Date.now()
+){
+    premiumCount++;
+}
+
     });
 
     setTotalUsers(usersSnap.size);
@@ -299,6 +312,7 @@ useEffect(() => {
   episode: i + 1,
   image: imageData.url,
   videoUrl: videoData.url,
+  type: "series",
   featured: seriesFeatured,
   premium: premium,
           coinCost: 50,
@@ -313,6 +327,7 @@ useEffect(() => {
 
     alert("Upload Success");
 
+   
     setTitle("");
     setVideoFiles([]);
     setImageFiles([]);
@@ -331,6 +346,7 @@ const q = query(
   collection(db, "videos"),
   orderBy("createdAt", "desc")
 );
+
 
   /* ================= DELETE ================= */
   const deleteVideo = async (id) => {
@@ -572,8 +588,7 @@ const loadVipRequests = async () => {
       {/* STATS */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-10">
         <div className="bg-red-600 p-4 rounded-xl">Videos: {videos.length}</div>
-        <div className="bg-blue-600 p-4 rounded-xl">Visitors: {todayVisitors}</div>
-        <div className="bg-green-600 p-4 rounded-xl">Users: {totalUsers}</div>
+        <div className="bg-blue-600 p-4 rounded-xl">Visitors: {visitorCount}</div>        <div className="bg-green-600 p-4 rounded-xl">Users: {totalUsers}</div>
         <div className="bg-yellow-500 text-black p-4 rounded-xl">Premium: {premiumUsers}</div>
         <div className="bg-purple-600 p-4 rounded-xl">Views: {totalViews}</div>
       </div>

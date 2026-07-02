@@ -96,11 +96,15 @@ export default function NetflixRow({ title, items , userData }) {
   </div>
 )}
 
-              <img
-                src={v.image}
-                alt={v.title}
-                className="h-48 sm:h-60 md:h-72 w-full object-cover"
-              />
+             <img
+  src={v.image || "/placeholder.jpg"}
+  alt={v.title}
+  loading="lazy"
+  onError={(e) => {
+    e.currentTarget.src = "/placeholder.jpg";
+  }}
+  className="h-48 sm:h-60 md:h-72 w-full object-cover"
+/>
              
 
               <div className="p-3">

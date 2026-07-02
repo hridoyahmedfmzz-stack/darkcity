@@ -23,10 +23,15 @@ export default function HeroBanner({ items }) {
   return (
     <div className="relative h-[60vh] md:h-[85vh] overflow-hidden">
       
-      <img
-        src={hero.image}
-        className="absolute w-full h-full object-cover"
-      />
+     <img
+  src={hero.image}
+  alt={hero.title}
+  loading="lazy"
+  onError={(e) => {
+    e.currentTarget.src = "/placeholder.jpg";
+  }}
+  className="absolute w-full h-full object-cover"
+/>
 
       <div className="absolute inset-0 bg-black/70"></div>
 

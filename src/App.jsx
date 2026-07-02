@@ -27,12 +27,14 @@ import AdminControl from "./AdminControl";
 import History from "./History";
 import Profile from "./Profile";
 
+
 import { loadAds } from "./AdManager";
 import { db, auth } from "./firebase/firebase-config";
 import { checkVipExpiry } from "./utils/vip";
 import VipPage from "./VipPage";
 import VipRequests from "./VipRequests";
 import SuperAdmin from "./SuperAdmin";
+import { isVipUser } from "./utils/vip";
 
 
 import {

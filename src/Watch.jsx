@@ -20,9 +20,7 @@ import {
   unlockVideo
 } from "./utils/videoUnlock";
 
-import {
-  showRewardAd
-} from "./utils/adsgram";
+import { showRewardAd } from "./utils/monetag";
 
 import LockedVideo from "./LockedVideo";
 import { spendCoins } from "./utils/coins";
@@ -51,6 +49,7 @@ const lastInterstitialRef = useRef(0);
 const [premiumUnlocked, setPremiumUnlocked] =
   useState(false);
         const viewedRef = useRef(false);
+
 
   const isTelegram =
   window.Telegram &&
@@ -118,24 +117,8 @@ if (
 
 
 
-const handleTimeUpdate = async (e) => {
-  const current = e.target.currentTime;
 
-  if (
-    current >= 15 &&
-    !viewedRef.current
-  ) {
-    viewedRef.current = true;
 
-    await updateDoc(
-      doc(db, "videos", id),
-      {
-        views: increment(1),
-        todayViews: increment(1)
-      }
-    );
-  }
-};
       /* ---------------- EPISODES ---------------- */
       const all = await getDocs(collection(db, "videos"));
 
@@ -397,9 +380,9 @@ const watchBonusAd = async () => {
       <Navbar />
       <AdBanner />
 
-      <div className="max-w-6xl mx-auto p-5">
+      <div className="max-w-[1700px] mx-auto px-4 py-5">
 
-        <h1 className="text-4xl font-black mb-6 text-white-500">
+       <h1 className="text-3xl lg:text-5xl font-black mb-6">
           {video.title}
         </h1>
 
@@ -420,18 +403,31 @@ const watchBonusAd = async () => {
             </button>
           </div>
         ) : (
-          <video
-            id="darkcity-player"
-            ref={videoRef}
-            controls
-            autoPlay
-            playsInline
-            onTimeUpdate={handleTimeUpdate}
-            onEnded={playNext}
-            className="w-full h-[35vh] md:h-[70vh] bg-black rounded-2xl"
-          >
-            <source src={video.videoUrl} type="video/mp4" />
-          </video>
+         <div className="w-full rounded-2xl overflow-hidden bg-black shadow-2xl">
+  <video
+    ref={videoRef}
+    controls
+    playsInline
+    preload="metadata"
+    autoPlay
+    onTimeUpdate={handleTimeUpdate}
+    onEnded={playNext}
+    className="
+      w-full
+      h-[75vh]
+      lg:h-[85vh]
+      object-contain
+      bg-black
+      rounded-2xl
+    "
+    onError={() => {
+      console.log("Video Load Failed");
+    }}
+  >
+    <source src={video.videoUrl} type="video/mp4" />
+    Your browser does not support HTML5 video.
+  </video>
+</div>
         )}
         {/* COINS SECTION */}
 
@@ -469,7 +465,7 @@ const watchBonusAd = async () => {
       {/* Ad container */}
       <div className="mb-4">
   <a
-    href="https://omg10.com/4/10937558"
+    href="https://omg10.com/4/11208077"
     target="_blank"
     rel="noopener noreferrer"
   >

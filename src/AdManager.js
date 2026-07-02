@@ -1,56 +1,40 @@
+// utils/monetag.js
+
 export const loadAds = () => {
-  const scripts = [
-    "https://5gvci.com/act/files/tag.min.js?z=11112615",
-    "https://al5sm.com/tag.min.js",
-    "https://pl29599523.effectivecpmnetwork.com/79/c0/7c/79c07c0f4b220f4534c1010316c6f060.js",
-    "//libtl.com/sdk.js",
-  ];
-  
 
-  scripts.forEach((src) => {
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    document.body.appendChild(script);
-  });
-};
+  const script = document.createElement("script");
 
-export const isTelegram =
-  window.Telegram &&
-  window.Telegram.WebApp;
+  // এখানে Monetag Dashboard থেকে পাওয়া script URL বসাবে
+  script.src =
+    "<script src='//libtl.com/sdk.js' data-zone='11005883' data-sdk='show_11005883'></script>";
 
-  export const showWebsiteAd = () => {
+  script.async = true;
 
-  if(window.show_10937558){
-     window.show_10937558();
-  }
+  document.body.appendChild(script);
 
 };
 
-export const showTelegramAd = async () => {
+export const showRewardAd = async () => {
 
-  const AdController =
-    window.Adsgram?.init({
-      blockId:"int-34641"
-    });
+  try {
 
-  return await AdController.show();
+    if (
+      typeof window.show_11005883 !==
+      "function"
+    ) {
+      alert("Reward Ad Not Loaded");
+      return false;
+    }
 
-};
+    await window.show_11005883();
 
-export const showSmartAd = async () => {
+    return true;
 
-  const isTelegram =
-    window.Telegram &&
-    window.Telegram.WebApp;
+  } catch (e) {
 
-  if(isTelegram){
+    console.error("Monetag Error:", e);
 
-     return await showTelegramAd();
-
-  }else{
-
-     showWebsiteAd();
+    return false;
 
   }
 

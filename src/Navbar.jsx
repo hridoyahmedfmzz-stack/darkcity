@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { auth } from "./firebase/firebase-config";
-import { signOut } from "firebase/auth";
+import { auth ,db} from "./firebase/firebase-config";
+import { signOut, onAuthStateChanged } from "firebase/auth";
 import { getUserCoins } from "./utils/coins";
 import { isVipUser } from "./utils/vip";
+import { doc, onSnapshot } from "firebase/firestore";
 
 export default function Navbar({ search, setSearch, userData }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [coins, setCoins] = useState(0);
+  const [user, setUser] = useState(null);
 
   const showSearch =
     location.pathname === "/" ||
@@ -17,21 +19,40 @@ export default function Navbar({ search, setSearch, userData }) {
 
 useEffect(() => {
 
-  const load = async () => {
+  if (!auth.currentUser) return;
 
-    if (!auth.currentUser)
-      return;
+  const unsubscribe = onSnapshot(
 
-    setCoins(
-      await getUserCoins(
-        auth.currentUser.uid
-      )
-    );
-  };
+    doc(db, "users", auth.currentUser.uid),
 
-  load();
+    (snap) => {
+
+      if (!snap.exists()) return;
+
+      setCoins(snap.data().coins || 0);
+
+    }
+
+  );
+
+  return () => unsubscribe();
 
 }, []);
+
+useEffect(() => {
+
+   const unsub = onAuthStateChanged(auth,(u)=>{
+
+      setUser(u);
+
+   });
+
+   return unsub;
+
+},[]);
+user?.displayName
+user?.email
+user?.photoURL
 
   return (
     <div className="
@@ -41,18 +62,34 @@ bg-black/70
 border-b border-red-500/20
 shadow-lg
 ">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
-
+      <div
+className="
+max-w-[1600px]
+mx-auto
+px-6
+py-3
+flex
+items-center
+justify-between
+gap-4
+flex-wrap
+"
+>
         <Link to="/">
-         <h1 className="
-text-4xl
+        <h1
+className="
+text-5xl
 font-black
+tracking-wider
 bg-gradient-to-r
 from-red-500
-to-pink-500
+via-pink-500
+to-purple-500
 bg-clip-text
 text-transparent
-">
+drop-shadow-lg
+"
+>
 DARKCITY
 </h1>
         </Link>
@@ -63,69 +100,193 @@ DARKCITY
             placeholder="Search Videos..."
             value={search || ""}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full md:w-80 bg-white/10 px-4 py-2 rounded-xl outline-none"
+           className="
+w-full
+md:w-[350px]
+lg:w-[420px]
+bg-zinc-900
+border
+border-zinc-700
+rounded-2xl
+px-5
+py-3
+text-white
+placeholder:text-gray-500
+focus:border-red-500
+outline-none
+transition
+"
           />
         )}
         {isVipUser(userData) && (
-  <span className="bg-yellow-500 text-black px-2 py-1 rounded">
-     VIP
-  </span>
+  <span
+className="
+px-4
+py-2
+rounded-full
+bg-gradient-to-r
+from-yellow-400
+to-orange-500
+text-black
+font-bold
+animate-pulse
+shadow-lg
+">
+
+ VIP
+
+</span>
 )}
 <button
   onClick={() => navigate("/vip")}
   className="
-w-full md:w-96
-bg-zinc-900/80
-border border-zinc-700
-px-5 py-3
+px-8
+py-3
 rounded-2xl
-focus:border-red-500
-outline-none
+bg-gradient-to-r
+from-yellow-500
+to-orange-500
+text-black
+font-bold
+shadow-lg
+hover:scale-105
+transition
 "
 >
-  ⭐ Buy VIP
+   Buy VIP
 </button>
 
-        <span className="font-bold">
-  🪙 {coins}
-</span>
+        <div
+          className="
+          flex
+          items-center
+          gap-2
+          px-5
+          py-3
+          rounded-2xl
+          bg-yellow-500/10
+          border
+          border-yellow-400
+          text-yellow-300
+          font-bold
+          shadow-lg
+          "
+        >
+          <span>🪙 {coins}</span>
+        </div>
 
         <button
           onClick={() => navigate("/all-videos")}
-          className="bg-red-600 px-4 py-2 rounded m-4"
+          className="
+          px-6
+          py-3
+          rounded-2xl
+          bg-red-600
+          hover:bg-red-700
+          font-semibold
+          transition
+          shadow-lg
+          "
         >
           Video
         </button>
 
+        <button
+          onClick={() => navigate("/history")}
+          className="
+          px-6
+          py-3
+          rounded-2xl
+          bg-red-600
+          hover:bg-red-700
+          font-semibold
+          transition
+          shadow-lg
+          "
+        >
+          History
+        </button>
+
+
 <button
-  onClick={() => navigate("/history")}
-  className="bg-red-600 px-4 py-2 rounded-xl"
+  onClick={() => navigate("/profile")}
+  className="
+  flex
+  items-center
+  gap-3
+  bg-zinc-900
+  hover:bg-zinc-800
+  border
+  border-zinc-700
+  rounded-2xl
+  px-3
+  py-2
+  transition
+  shadow-lg
+"
 >
-  History
+  <img
+    src={user?.photoURL || "/avatar.png"}
+    alt=""
+    className="
+    w-12
+    h-12
+    rounded-full
+    object-cover
+    border-2
+    border-red-500
+    flex-shrink-0
+    "
+  />
+
+  <div className="text-left">
+    <h3 className="text-white font-bold leading-5 max-w-[120px] truncate">
+      {user?.displayName || "Guest"}
+    </h3>
+
+    <p className="text-xs text-gray-400">
+      View Profile
+    </p>
+  </div>
 </button>
 
-        {auth.currentUser ? (
-          <div className="flex items-center gap-3">
-            <p className="font-bold">
-              {auth.currentUser.displayName ||
-                auth.currentUser.email}
-            </p>
-
-            <button
-              onClick={() => signOut(auth)}
-              className="bg-red-600 px-4 py-2 rounded-xl"
-            >
-              Logout
-            </button>
-          </div>
-        ) : (
-          <Link to="/login">
-            <button className="bg-red-600 px-5 py-2 rounded-xl">
-              Login
-            </button>
-          </Link>
-        )}
+  {auth.currentUser ? (
+    <button
+      onClick={() => signOut(auth)}
+      className="
+px-6
+py-3
+rounded-2xl
+bg-gradient-to-r
+from-red-600
+to-red-500
+hover:scale-105
+transition
+shadow-lg
+font-bold
+"
+    >
+      Logout
+    </button>
+  ) : (
+    <Link to="/login">
+      <button className="
+px-6
+py-3
+rounded-2xl
+bg-gradient-to-r
+from-red-600
+to-red-500
+hover:scale-105
+transition
+shadow-lg
+font-bold
+">
+        Login
+      </button>
+    </Link>
+  )}
+</div>
       </div>
-    </div>
   );
 }
