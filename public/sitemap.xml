@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <url>
+    <loc>https://darkcity.dpdns.org/</loc>
+    <priority>1.0</priority>
+  </url>
+
+  <url>
+    <loc>https://darkcity.dpdns.org/all-videos</loc>
+  </url>
+
+  <url>
+    <loc>https://darkcity.dpdns.org/vip</loc>
+  </url>
+
+  <url>
+    <loc>https://darkcity.dpdns.org/profile</loc>
+  </url>
+
+  <url>
+    <loc>https://darkcity.dpdns.org/about</loc>
+  </url>
+
+  <url>
+    <loc>https://darkcity.dpdns.org/contact</loc>
+  </url>
+
+  <url>
+    <loc>https://darkcity.dpdns.org/privacy-policy</loc>
+  </url>
+
+  <url>
+    <loc>https://darkcity.dpdns.org/terms</loc>
+  </url>
+
+  <url>
+    <loc>https://darkcity.dpdns.org/disclaimer</loc>
+  </url>
+
+  <url>
+    <loc>https://darkcity.dpdns.org/dmca</loc>
+  </url>
+
+</urlset>
